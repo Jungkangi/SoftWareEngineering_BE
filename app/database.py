@@ -13,3 +13,5 @@ database = Database(DATABASE_URL)
 engine = create_engine(DATABASE_URL.replace("+aiomysql", ""))
 
 metadata = MetaData()
+
+# test
