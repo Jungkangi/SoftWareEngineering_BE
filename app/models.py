@@ -42,3 +42,20 @@ team = Table(
     Column("P_ID", String(100), ForeignKey("PROJECT.P_ID")),
     Column("CREATE_DATE", Date),
 )
+
+# ISSUE 테이블
+issue = Table(
+    "ISSUE",
+    metadata,
+    Column("I_ID", Integer, primary_key=True, autoincrement=True),
+    Column("TITLE", String(100), nullable=False),
+    Column("CONTENT", String(300)),
+    Column("I_STATE", String(20)),
+    Column("I_RELEASE", String(20)),
+    Column("PRIORITY", String(20)),
+    Column("CREATE_DATE", Date),
+    Column("EXPIRE_DATE", Date),
+    Column("FROM_U_ID", String(30), ForeignKey("USER.UID")),
+    Column("FOR_U_ID", String(30), ForeignKey("USER.UID")),
+    Column("P_ID", String(100), ForeignKey("PROJECT.P_ID"))
+)

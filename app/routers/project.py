@@ -14,7 +14,7 @@ router = APIRouter()
 class ProjectIn(BaseModel):
     P_ID: str                      # 프로젝트 ID
     P_NAME: str                    # 프로젝트 이름
-    P_STATUS: str = "IN_PROGRESS" # 기본값은 '진행 중'
+    P_STATUS: str = "IN_PROGRESS" # 기본값은 '진행 중'  
     # UID는 더 이상 클라이언트로부터 받지 않음 → JWT로 추출
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
