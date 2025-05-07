@@ -17,7 +17,12 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+<<<<<<< Updated upstream
             cd ~/SoftWareEngineering_FE
+=======
+            cd ~/SoftWareEngineering_BE
+            git config --global --add safe.directory /home/ubuntu/SoftWareEngineering_BE
+>>>>>>> Stashed changes
             git pull origin dev
             docker compose down || true
             docker compose up -d --build
