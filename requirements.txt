@@ -10,3 +10,4 @@ python-dotenv==1.0.1
 typing-extensions>=4.12.2
 aiomysql==0.2.0
 python-jose==3.3.0
+passlib[bcrypt]==1.7.4
