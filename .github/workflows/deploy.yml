@@ -17,7 +17,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/SoftWareEngineering_FE
+            cd ~/SoftWareEngineering_BE
             git pull origin dev
             docker compose down || true
             docker compose up -d --build
