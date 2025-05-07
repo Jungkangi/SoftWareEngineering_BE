@@ -18,6 +18,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/SoftWareEngineering_BE
+            git config --global --add safe.directory /home/ubuntu/SoftWareEngineering_BE
             git pull origin dev
             docker compose down || true
             docker compose up -d --build
