@@ -155,7 +155,7 @@ async def create_issue(data: ISSUE_Create, current_user: dict = Depends(get_curr
        - 
     """
 
-    values = data.dict()
+    values = data
 
     # 현재 로그인한 사용자의 UID로 이슈 작성자 설정
     values["FROM_U_ID"] = current_user["UID"]
@@ -167,11 +167,7 @@ async def create_issue(data: ISSUE_Create, current_user: dict = Depends(get_curr
 
 # ✅ 이슈 수정 ( 이슈를 생성하거나 받은 사용자만 가능 )
 @router.post("/issues/{issue_id}", response_model=ISSUEOut)
-async def update_issue(
-    issue_id: int,
-    data: ISSUE_Create,
-    current_user: dict = Depends(get_current_user)  # JWT에서 UID 추출
-):
+async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = Depends(get_current_user)):
 
     """
     주어진 이슈 ID에 해당하는 이슈를 수정합니다.
@@ -184,9 +180,15 @@ async def update_issue(
        - 이슈 만료일
     """
 
-    # 1. issue_id에 맞는 이슈가 있는지, 그리고 현재 사용자가 이슈의 작성자이거나 수신자인지 확인
-
-    query = issue.select().where(issue.c.id == issue_id)
+    query = issue.select().where(
+        and_(
+            issue.c.I_ID == issue_id
+            or_(
+                issue.c.ReleaseEnum == ReleaseEnum.PUBLIC,
+                issue.c.FOR_U_ID == current_user["UID"],
+                issue.c.FROM_U_ID == current_user["UID"]
+            ))
+        )
     db_issue = await database.fetch_one(query)
 
     if not db_issue:
@@ -199,33 +201,23 @@ async def update_issue(
         )
 
     query = issue.update(
-
+        issue.c.TITLE,
+        issue.c.CONTENT,
+        issue.c.I_STATE,
+        issue.c.PRIORITY,
+        issue.c.I_RELEASE,
+        issue.c.START_DATE,
+        issue.c.EXPIRE_DATE,
+        issue.c.FROM_U_ID,
+        issue.c.FOR_U_ID
     ).where(
-        or_(
-            issue.c.FOR_U_ID == current_user["UID"],
-            issue.c.FROM_U_ID == current_user["UID"]
+        and_(
+            issue.c.P_ID == data.P_ID,
+            or_(
+                issue.c.FOR_U_ID == current_user["UID"],
+                issue.c.FROM_U_ID == current_user["UID"]
         ))
+    )
+    
     await database.execute(query)
     return values
-
-
-
-#####################################################
-
-async def read_project_member(project_id: str):
-
-    """
-    주어진 프로젝트 ID에 해당하는 팀원 목록을 조회합니다.
-    이슈 생성 시, 누구에게 이슈를 보낼지 선택할 수 있도록 합니다.
-    """
-
-    query = sa.select(user).join(project, user.c.UID == project.c.UID).where(project.c.P_ID == project_id)
-
-    # 위 SQL 쿼리문:
-    # SELECT u.UID, u.USERNAME
-    # FROM project_members pm
-    # JOIN users u ON pm.UID = u.UID
-    # WHERE pm.P_ID = ?;
-
-    return await database.fetch_all(query)
-
