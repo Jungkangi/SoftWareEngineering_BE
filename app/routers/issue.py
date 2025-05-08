@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from app.database import database
 from app.models import project, user
 from pydantic import BaseModel, validator, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 import sqlalchemy as sa
 from datetime import date
@@ -45,11 +45,11 @@ class ISSUE_Create(BaseModel):
     CONTENT: str    # 이슈 내용
     PRIORITY: PriorityEnum = Field(description= "중요도", default=PriorityEnum.MEDIUM)
     I_STATE: StateEnum = Field(description = "상태", default=StateEnum.NOT_CHECKED)
-    FROM_U_ID: str  # 이슈 수신자 (UID)
     I_RELEASE: ReleaseEnum = Field(description= "공개 여부", default=ReleaseEnum.PRIVATE)
-    P_ID: str       # 프로젝트 ID
-    
-    # UID는 더 이상 클라이언트로부터 받지 않음 → JWT로 추출 => FOR_U_ID 마찬가지
+    FOR_U_ID: str  # 이슈 수신자 (UID)
+    P_ID: str
+    START_DATE: date | None = None
+    EXPIRE_DATE: date | None = None
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
 class ISSUEOut(ISSUE_Create):
@@ -64,8 +64,7 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
 
     """
     주어진 프로젝트 ID에 해당하는 모든 이슈를 조회합니다.
-    이슈는 프로젝트에 속하며, 해당 프로젝트의 모든 팀원이 조회할 수 있습니다.
-        - public 이슈
+        - public 이슈 - 모든 사용자가 조회 가능
         - private 이슈 - 현재 사용자가 작성자 이거나 수신자일 때만 조회 가능
     """
 
@@ -75,7 +74,7 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
         issue.c.I_STATE,
         issue.c.PRIORITY,
         issue.c.I_RELEASE,
-        issue.c.CREATE_DATE,
+        issue.c.START_DATE,
         issue.c.EXPIRE_DATE,
         issue.c.FROM_U_ID,
         issue.c.FOR_U_ID
@@ -94,15 +93,59 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
             )
         )
     ) .order_by(issue.c.CREATE_DATE.desc())
-    return await database.fetch_all(query)
 
+    db_issue = await database.fetch_all(query)
+
+    if not db_issue:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+
+    return db_issue
+
+# ✅ 특정 이슈 상세 조회 (이슈 ID로 조회)
+@router.get("/issues/{issue_id}", response_model=ISSUEOut)
+async def view_issue(issue_id: int, current_user: dict = Depends(get_current_user)):
+
+    """
+    사용자가 선택한 이슈 ID에 해당하는 이슈를 조회합니다.
+    이슈의 상세한 정보를 확인할 수 있습니다.
+    """
+
+    query = sa.select(
+        issue.c.TITLE,
+        issue.c.CONTENT,
+        issue.c.I_STATE,
+        issue.c.PRIORITY,
+        issue.c.I_RELEASE,
+        issue.c.START_DATE,
+        issue.c.EXPIRE_DATE,
+        issue.c.FROM_U_ID,
+        issue.c.FOR_U_ID
+    ).where(
+        and_(
+            issue.c.I_ID == issue_id,
+            or_(
+                issue.c.I_RELEASE == ReleaseEnum.PUBLIC,
+                and_(
+                    issue.c.I_RELEASE == ReleaseEnum.PRIVATE,
+                    or_(
+                        issue.c.FOR_U_ID == current_user["UID"],
+                        issue.c.FROM_U_ID == current_user["UID"]
+                    )
+                )
+            )
+        )
+    )
+
+    db_issue = await database.fetch_one(query)
+
+    if not db_issue:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+
+    return db_issue
 
 # ✅ 이슈 생성 ( 인증된 사용자만 가능 )
 @router.post("/issues/", response_model=ISSUEOut)
-async def create_issue(
-    data: ISSUE_Create,
-    current_user: dict = Depends(get_current_user)  # JWT에서 UID 추출
-):
+async def create_issue(data: ISSUE_Create, current_user: dict = Depends(get_current_user)):
 
     """
     새로운 이슈를 생성합니다.
@@ -123,7 +166,9 @@ async def create_issue(
 
 
 # ✅ 이슈 수정 ( 이슈를 생성하거나 받은 사용자만 가능 )
+@router.post("/issues/{issue_id}", response_model=ISSUEOut)
 async def update_issue(
+    issue_id: int,
     data: ISSUE_Create,
     current_user: dict = Depends(get_current_user)  # JWT에서 UID 추출
 ):
@@ -139,10 +184,28 @@ async def update_issue(
        - 이슈 만료일
     """
 
-    values = data.dict()
+    # 1. issue_id에 맞는 이슈가 있는지, 그리고 현재 사용자가 이슈의 작성자이거나 수신자인지 확인
 
-    # query = issue.update().where(issue.c.I_ID == issue_id).values(**values)
-    # await database.execute(query)
+    query = issue.select().where(issue.c.id == issue_id)
+    db_issue = await database.fetch_one(query)
+
+    if not db_issue:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+    
+    if not (db_issue["FROM_U_ID"] == current_user["UID"] or db_issue["FOR_U_ID"] == current_user["UID"]):
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this issue"
+        )
+
+    query = issue.update(
+
+    ).where(
+        or_(
+            issue.c.FOR_U_ID == current_user["UID"],
+            issue.c.FROM_U_ID == current_user["UID"]
+        ))
+    await database.execute(query)
     return values
 
 
