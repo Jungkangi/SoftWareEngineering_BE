@@ -155,10 +155,11 @@ async def create_issue(data: ISSUE_Create, current_user: dict = Depends(get_curr
        - 
     """
 
-    values = data
+    values = data.dict()
 
     # 현재 로그인한 사용자의 UID로 이슈 작성자 설정
     values["FROM_U_ID"] = current_user["UID"]
+    values["CREATE_DATE"] = datetime.now()
 
     query = issue.insert().values(**values)
     await database.execute(query)
@@ -171,7 +172,7 @@ async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = D
 
     """
     주어진 이슈 ID에 해당하는 이슈를 수정합니다.
-    이슈는 특정 프로젝트에 속합니다.
+    이슈는 특정 프로젝트에 속합니다. 자신이 작성한 이슈만 수정이 가능합니다.
        - 이슈 제목
        - 이슈 내용
        - 이슈 상태
@@ -182,9 +183,8 @@ async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = D
 
     query = issue.select().where(
         and_(
-            issue.c.I_ID == issue_id
+            issue.c.I_ID == issue_id,
             or_(
-                issue.c.ReleaseEnum == ReleaseEnum.PUBLIC,
                 issue.c.FOR_U_ID == current_user["UID"],
                 issue.c.FROM_U_ID == current_user["UID"]
             ))
@@ -200,24 +200,57 @@ async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = D
             detail="You do not have permission to view this issue"
         )
 
-    query = issue.update(
-        issue.c.TITLE,
-        issue.c.CONTENT,
-        issue.c.I_STATE,
-        issue.c.PRIORITY,
-        issue.c.I_RELEASE,
-        issue.c.START_DATE,
-        issue.c.EXPIRE_DATE,
-        issue.c.FROM_U_ID,
-        issue.c.FOR_U_ID
-    ).where(
+    query = issue.update().where(
         and_(
             issue.c.P_ID == data.P_ID,
+            issue.c.I_ID == issue_id,
             or_(
                 issue.c.FOR_U_ID == current_user["UID"],
                 issue.c.FROM_U_ID == current_user["UID"]
         ))
+    ).values(
+        TITLE=data.TITLE,
+        CONTENT=data.CONTENT,
+        I_STATE=data.I_STATE,
+        PRIORITY=data.PRIORITY,
+        I_RELEASE=data.I_RELEASE,
+        START_DATE=data.START_DATE,
+        EXPIRE_DATE=data.EXPIRE_DATE,
+        For_U_ID=data.FOR_U_ID
     )
     
-    await database.execute(query)
+    values = await database.execute(query)
     return values
+
+# ✅ 이슈 삭제 ( 이슈를 생성하거나 받은 사용자만 가능 )
+@router.delete("/issues/{issue_id}")
+async def delete_issue(issue_id: int, current_user: dict = Depends(get_current_user)):
+
+    """
+    주어진 이슈 ID에 해당하는 이슈를 삭제합니다.
+    이슈는 특정 프로젝트에 속합니다. 자신이 작성한 이슈만 삭제가 가능합니다.
+    """
+
+    query = issue.select().where(
+        and_(
+            issue.c.I_ID == issue_id,
+            or_(
+                issue.c.FOR_U_ID == current_user["UID"],
+                issue.c.FROM_U_ID == current_user["UID"]
+            ))
+        )
+    db_issue = await database.fetch_one(query)
+
+    if not db_issue:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+    
+    if not (db_issue["FROM_U_ID"] == current_user["UID"] or db_issue["FOR_U_ID"] == current_user["UID"]):
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this issue"
+        )
+
+    query = issue.delete().where(issue.c.I_ID == issue_id)
+    await database.execute(query)
+
+    return {"message": "Issue deleted successfully"}
