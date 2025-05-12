@@ -53,6 +53,7 @@ issue = Table(
     Column("I_STATE", String(20)),
     Column("I_RELEASE", String(20)),
     Column("PRIORITY", String(20)),
+    Column("CREATE_DATE", Date),
     Column("START_DATE", Date),
     Column("EXPIRE_DATE", Date),
     Column("FROM_U_ID", String(30), ForeignKey("USER.UID")),
