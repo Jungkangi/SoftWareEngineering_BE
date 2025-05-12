@@ -41,12 +41,11 @@ class StateEnum(str, Enum):
 
 # ✅ 요청용 스키마: 클라이언트가 보낼 데이터 형식 정의
 class ISSUE_Create(BaseModel):
-    TITLE: str      # 이슈 제목
-    CONTENT: str    # 이슈 내용
+    TITLE: str
+    CONTENT: str
     PRIORITY: PriorityEnum = Field(description= "중요도", default=PriorityEnum.MEDIUM)
-    I_STATE: StateEnum = Field(description = "상태", default=StateEnum.NOT_CHECKED)
     I_RELEASE: ReleaseEnum = Field(description= "공개 여부", default=ReleaseEnum.PRIVATE)
-    FOR_U_ID: str  # 이슈 수신자 (UID)
+    FOR_U_ID: str
     P_ID: str
     START_DATE: date | None = None
     EXPIRE_DATE: date | None = None

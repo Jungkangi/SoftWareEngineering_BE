@@ -8,6 +8,14 @@ class ProjectStatus(enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     ON_HOLD = "ON_HOLD"
+    CANCELLED = "CANCELLED"
+
+class IssueStatus(enum.Enum):
+    NOT_CHECKED = "NOT_CHECKED" # 미확인
+    CHECKED = "CHECKED"         # 확인됨
+    IN_PROGRESS = "IN_PROGRESS" # 진행 중
+    COMPLETED = "COMPLETED"     # 완료
+    ON_HOLD = "ON_HOLD"         # 보류 중
 
 # USER 테이블
 user = Table(
@@ -25,7 +33,7 @@ user = Table(
 project = Table(
     "PROJECT",
     metadata,
-    Column("P_ID", String(100), primary_key=True),
+    Column("P_ID", Integer, primary_key=True, autoincrement=True),
     Column("P_NAME", String(50), nullable=False),
     Column("P_CDATE", DateTime),
     Column("P_STATUS", Enum(ProjectStatus), default=ProjectStatus.IN_PROGRESS),
@@ -50,7 +58,7 @@ issue = Table(
     Column("I_ID", Integer, primary_key=True, autoincrement=True),
     Column("TITLE", String(100), nullable=False),
     Column("CONTENT", String(300)),
-    Column("I_STATE", String(20)),
+    Column("I_STATE", String(20), default=IssueStatus.NOT_CHECKED),
     Column("I_RELEASE", String(20)),
     Column("PRIORITY", String(20)),
     Column("CREATE_DATE", Date),

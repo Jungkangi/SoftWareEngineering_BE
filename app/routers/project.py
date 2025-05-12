@@ -1,7 +1,8 @@
+from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends
 from app.database import database
 from app.models import project, user
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 import sqlalchemy as sa
@@ -10,11 +11,16 @@ from app.dependencies import get_current_user
 
 router = APIRouter()
 
+class P_Enum(str, Enum):
+    IN_PROGRESS = "IN_PROGRESS" # 진행 중
+    COMPLETED = "COMPLETED"     # 완료
+    ON_HOLD = "ON_HOLD"         # 보류 중
+    CANCELLED = "CANCELLED"     # 취소됨
+
 # ✅ 요청용 스키마: 클라이언트가 보낼 데이터 형식 정의
 class ProjectIn(BaseModel):
-    P_ID: str                      # 프로젝트 ID
     P_NAME: str                    # 프로젝트 이름
-    P_STATUS: str = "IN_PROGRESS" # 기본값은 '진행 중'  
+    P_STATUS: P_Enum = Field(description= "상태", default=P_Enum.IN_PROGRESS)
     # UID는 더 이상 클라이언트로부터 받지 않음 → JWT로 추출
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식

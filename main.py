@@ -26,4 +26,3 @@ app.include_router(auth.router)
 def read_root():
     return {"message": "Hello FastAPI with MariaDB!"}
 
-#test1
