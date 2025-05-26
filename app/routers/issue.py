@@ -12,6 +12,8 @@ from enum import Enum
 from ..models import issue, project, user
 from sqlalchemy import and_, or_
 
+from app.models import IssueStatus, PriorityEnum, ReleaseEnum
+
 router = APIRouter()
 
 
@@ -22,43 +24,27 @@ class UserSelect(BaseModel):
     class Config:
         from_attributes = True # Pydantic v2.x에서 사용되는 설정
 
-class ReleaseEnum(str, Enum):
-    PUBLIC = "PUBLIC"   # 공개
-    PRIVATE = "PRIVATE" # 비공개
-
-class PriorityEnum(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-
-class StateEnum(str, Enum):
-    NOT_CHECKED = "NOT_CHECKED" # 미확인
-    CHECKED = "CHECKED"         # 확인됨
-    IN_PROGRESS = "IN_PROGRESS" # 진행 중
-    COMPLETED = "COMPLETED"     # 완료
-    ON_HOLD = "ON_HOLD"         # 보류 중
-
 
 # ✅ 요청용 스키마: 클라이언트가 보낼 데이터 형식 정의
-class ISSUE_Create(BaseModel):
+class ISSUE_SEND(BaseModel):
     TITLE: str
     CONTENT: str
-    PRIORITY: PriorityEnum = Field(description= "중요도", default=PriorityEnum.MEDIUM)
+    I_STATUS: IssueStatus = Field(description= "이슈 상태", default=IssueStatus.NOT_CHECKED)
+    PRIORITY: PriorityEnum = Field(description= "중요도", default=PriorityEnum.LOW)
     I_RELEASE: ReleaseEnum = Field(description= "공개 여부", default=ReleaseEnum.PRIVATE)
-    FOR_U_ID: str
-    P_ID: str
-    START_DATE: date | None = None
-    EXPIRE_DATE: date | None = None
+    FOR_UID: str
+    START_DATE: date
+    EXPIRE_DATE: date
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
-class ISSUEOut(ISSUE_Create):
-    I_CDATE: datetime | None = None  # 프로젝트 생성일 (응답 전용 필드)
+class ISSUEOut(ISSUE_SEND):
+    CREATE_DATE: datetime | None = None  # 프로젝트 생성일 (응답 전용 필드)
 
 
 ###########################################################################
 
-# ✅ 전체 이슈 조회 (선택된 프로젝트 내의 모든 이슈 / 해당 프로젝트 관련자만 가능)
-@router.get("/issues/{project_id}", response_model=List[ISSUEOut])
+# ✅ 전체 이슈 조회 (선택된 프로젝트 내의 모든 이슈 / 해당 프로젝트 관련자만 가능) - 완
+@router.get("/issues/view/{project_id}", response_model=List[ISSUEOut])
 async def get_issues(project_id: str, current_user: dict = Depends(get_current_user)):
 
     """
@@ -68,15 +54,16 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
     """
 
     query = sa.select(
+        issue.c.P_ID,
         issue.c.TITLE,
         issue.c.CONTENT,
-        issue.c.I_STATE,
+        issue.c.I_STATUS,
         issue.c.PRIORITY,
         issue.c.I_RELEASE,
         issue.c.START_DATE,
         issue.c.EXPIRE_DATE,
-        issue.c.FROM_U_ID,
-        issue.c.FOR_U_ID
+        issue.c.FROM_UID,
+        issue.c.FOR_UID
     ).where(
         and_(
             issue.c.P_ID == project_id,
@@ -85,8 +72,8 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
                 and_(
                     issue.c.I_RELEASE == ReleaseEnum.PRIVATE,
                     or_(
-                        issue.c.FOR_U_ID == current_user["UID"],
-                        issue.c.FROM_U_ID == current_user["UID"]
+                        issue.c.FOR_UID == current_user["UID"],
+                        issue.c.FROM_UID == current_user["UID"]
                     )
                 )
             )
@@ -100,7 +87,7 @@ async def get_issues(project_id: str, current_user: dict = Depends(get_current_u
 
     return db_issue
 
-# ✅ 특정 이슈 상세 조회 (이슈 ID로 조회)
+# ✅ 특정 이슈 상세 조회 (이슈 ID로 조회) - 완
 @router.get("/issues/{issue_id}", response_model=ISSUEOut)
 async def view_issue(issue_id: int, current_user: dict = Depends(get_current_user)):
 
@@ -112,13 +99,14 @@ async def view_issue(issue_id: int, current_user: dict = Depends(get_current_use
     query = sa.select(
         issue.c.TITLE,
         issue.c.CONTENT,
-        issue.c.I_STATE,
+        issue.c.I_STATUS,
         issue.c.PRIORITY,
         issue.c.I_RELEASE,
         issue.c.START_DATE,
         issue.c.EXPIRE_DATE,
-        issue.c.FROM_U_ID,
-        issue.c.FOR_U_ID
+        issue.c.FROM_UID,
+        issue.c.FOR_UID,
+        issue.c.CREATE_DATE
     ).where(
         and_(
             issue.c.I_ID == issue_id,
@@ -127,8 +115,8 @@ async def view_issue(issue_id: int, current_user: dict = Depends(get_current_use
                 and_(
                     issue.c.I_RELEASE == ReleaseEnum.PRIVATE,
                     or_(
-                        issue.c.FOR_U_ID == current_user["UID"],
-                        issue.c.FROM_U_ID == current_user["UID"]
+                        issue.c.FOR_UID == current_user["UID"],
+                        issue.c.FROM_UID == current_user["UID"]
                     )
                 )
             )
@@ -142,32 +130,33 @@ async def view_issue(issue_id: int, current_user: dict = Depends(get_current_use
 
     return db_issue
 
-# ✅ 이슈 생성 ( 인증된 사용자만 가능 )
-@router.post("/issues/", response_model=ISSUEOut)
-async def create_issue(data: ISSUE_Create, current_user: dict = Depends(get_current_user)):
+# ✅ 이슈 생성 ( 인증된 사용자만 가능 ) - 완
+@router.post("/issues/create/{project_id}", response_model=ISSUEOut)
+async def create_issue(project_id: int, data: ISSUE_SEND, current_user: dict = Depends(get_current_user)):
 
     """
     새로운 이슈를 생성합니다.
     이슈는 특정 프로젝트에 속합니다.
        - 이슈 작성자는 현재 로그인한 사용자로 설정됩니다.
-       - 이슈 수신자는 클라이언트에서 전달받은 for_U_ID로 설정됩니다.
+       - 이슈 수신자는 클라이언트에서 전달받은 FOR_UID로 설정됩니다.
        - 
     """
 
     values = data.dict()
 
     # 현재 로그인한 사용자의 UID로 이슈 작성자 설정
-    values["FROM_U_ID"] = current_user["UID"]
-    values["CREATE_DATE"] = datetime.now()
+    values["P_ID"] = project_id
+    values["FROM_UID"] = current_user["UID"]
+    values["CREATE_DATE"] = datetime.now().date()
 
     query = issue.insert().values(**values)
     await database.execute(query)
     return values
 
 
-# ✅ 이슈 수정 ( 이슈를 생성하거나 받은 사용자만 가능 )
-@router.post("/issues/{issue_id}", response_model=ISSUEOut)
-async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = Depends(get_current_user)):
+# ✅ 이슈 수정 ( 이슈를 생성하거나 받은 사용자만 가능 ) - 완
+@router.post("/issues/update/{issue_id}", response_model=ISSUEOut)
+async def update_issue(issue_id: int, data: ISSUE_SEND, current_user: dict = Depends(get_current_user)):
 
     """
     주어진 이슈 ID에 해당하는 이슈를 수정합니다.
@@ -177,6 +166,7 @@ async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = D
        - 이슈 상태
        - 이슈 중요도
        - 이슈 공개 여부
+       - 이슈 시작일
        - 이슈 만료일
     """
 
@@ -184,45 +174,54 @@ async def update_issue(issue_id: int, data: ISSUE_Create, current_user: dict = D
         and_(
             issue.c.I_ID == issue_id,
             or_(
-                issue.c.FOR_U_ID == current_user["UID"],
-                issue.c.FROM_U_ID == current_user["UID"]
+                issue.c.FOR_UID == current_user["UID"],
+                issue.c.FROM_UID == current_user["UID"]
             ))
         )
     db_issue = await database.fetch_one(query)
 
+    # 이슈 존재하는지 확인
     if not db_issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     
-    if not (db_issue["FROM_U_ID"] == current_user["UID"] or db_issue["FOR_U_ID"] == current_user["UID"]):
+    # 이슈 확인할 수 있는 권한인지 확인
+    if not (db_issue["FROM_UID"] == current_user["UID"] or db_issue["FOR_UID"] == current_user["UID"]):
          raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this issue"
         )
 
+    # 이슈 수정
     query = issue.update().where(
         and_(
-            issue.c.P_ID == data.P_ID,
             issue.c.I_ID == issue_id,
             or_(
-                issue.c.FOR_U_ID == current_user["UID"],
-                issue.c.FROM_U_ID == current_user["UID"]
+                issue.c.FOR_UID == current_user["UID"],
+                issue.c.FROM_UID == current_user["UID"]
         ))
     ).values(
         TITLE=data.TITLE,
         CONTENT=data.CONTENT,
-        I_STATE=data.I_STATE,
+        I_STATUS=data.I_STATUS,
         PRIORITY=data.PRIORITY,
         I_RELEASE=data.I_RELEASE,
         START_DATE=data.START_DATE,
         EXPIRE_DATE=data.EXPIRE_DATE,
-        For_U_ID=data.FOR_U_ID
+        FOR_UID=data.FOR_UID
     )
     
-    values = await database.execute(query)
-    return values
+    revised_rows = await database.execute(query)
 
-# ✅ 이슈 삭제 ( 이슈를 생성하거나 받은 사용자만 가능 )
-@router.delete("/issues/{issue_id}")
+    if revised_rows == 0:
+        pass
+
+    restore_query = issue.select().where(issue.c.I_ID == issue_id)
+    db_issue = await database.fetch_one(restore_query)
+
+    return db_issue
+
+# ✅ 이슈 삭제 ( 이슈를 생성하거나 받은 사용자만 가능 ) - 완
+@router.delete("/issues/delete/{issue_id}")
 async def delete_issue(issue_id: int, current_user: dict = Depends(get_current_user)):
 
     """
@@ -234,8 +233,8 @@ async def delete_issue(issue_id: int, current_user: dict = Depends(get_current_u
         and_(
             issue.c.I_ID == issue_id,
             or_(
-                issue.c.FOR_U_ID == current_user["UID"],
-                issue.c.FROM_U_ID == current_user["UID"]
+                issue.c.FOR_UID == current_user["UID"],
+                issue.c.FROM_UID == current_user["UID"]
             ))
         )
     db_issue = await database.fetch_one(query)
@@ -243,7 +242,7 @@ async def delete_issue(issue_id: int, current_user: dict = Depends(get_current_u
     if not db_issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     
-    if not (db_issue["FROM_U_ID"] == current_user["UID"] or db_issue["FOR_U_ID"] == current_user["UID"]):
+    if not (db_issue["FROM_UID"] == current_user["UID"] or db_issue["FOR_UID"] == current_user["UID"]):
          raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this issue"
