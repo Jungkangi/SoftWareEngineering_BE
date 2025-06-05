@@ -1,6 +1,7 @@
+
 from sqlalchemy import Table, Column, Integer, String, Date, DateTime, Enum, ForeignKey, MetaData, Boolean
 import enum
-
+from datetime import datetime
 metadata = MetaData()
 
 #############################################################
@@ -38,7 +39,12 @@ class AlertTypeEnum(enum.Enum):
     ISSUE_DEADLINE_OVER = "ISSUE_DEADLINE_OVER"  # 이슈 마감 초과
 
 
-############################################################
+# 🔹 Sprint 상태 ENUM 정의
+class SprintStatus(enum.Enum):
+    TODO = "TODO"
+    PROCESSING = "PROCESSING"
+    REVIEW = "REVIEW"
+    DONE = "DONE"
 
 # USER 테이블
 user = Table(
@@ -104,3 +110,29 @@ alert = Table(
     Column("P_ID", Integer, ForeignKey("PROJECT.P_ID"), nullable=True),
     Column("I_ID", Integer, ForeignKey("ISSUE.I_ID"), nullable=True)
 )
+
+
+# 🔹 Sprint 테이블 정의
+sprint = Table(
+    "SPRINT",
+    metadata,
+    Column("S_ID", Integer, primary_key=True, autoincrement=True),
+    Column("TITLE", String(30)),
+    Column("CONTENTS", String(30)),
+    Column("P_ID", Integer, ForeignKey("PROJECT.P_ID")),  
+    Column("STAT", Enum(SprintStatus)),
+    Column("CREATE_DATE", Date)
+)
+
+# COMMENT 테이블 정의
+comment = Table(
+    "COMMENT",
+    metadata,
+    Column("C_ID", Integer, primary_key=True, autoincrement=True),
+    Column("REF_TYPE", String(20), nullable=False),
+    Column("REF_ID", Integer, nullable=False),
+    Column("UID", String(30), ForeignKey("USER.UID"), nullable=False),
+    Column("CONTENT", String(500), nullable=False),           # ✅ 변경된 부분
+    Column("CREATE_DATE", DateTime, default=datetime.utcnow)
+)
+
