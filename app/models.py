@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import Table, Column, Integer, String, Date, DateTime, Enum, ForeignKey, MetaData
 import enum
 
@@ -16,6 +17,13 @@ class IssueStatus(enum.Enum):
     IN_PROGRESS = "IN_PROGRESS" # 진행 중
     COMPLETED = "COMPLETED"     # 완료
     ON_HOLD = "ON_HOLD"         # 보류 중
+
+# 🔹 Sprint 상태 ENUM 정의
+class SprintStatus(enum.Enum):
+    TODO = "TODO"
+    PROCESSING = "PROCESSING"
+    REVIEW = "REVIEW"
+    DONE = "DONE"
 
 # USER 테이블
 user = Table(
@@ -67,4 +75,29 @@ issue = Table(
     Column("FROM_U_ID", String(30), ForeignKey("USER.UID")),
     Column("FOR_U_ID", String(30), ForeignKey("USER.UID")),
     Column("P_ID", String(100), ForeignKey("PROJECT.P_ID"))
+)
+
+
+# 🔹 Sprint 테이블 정의
+sprint = Table(
+    "SPRINT",
+    metadata,
+    Column("S_ID", Integer, primary_key=True, autoincrement=True),
+    Column("TITLE", String(30)),
+    Column("CONTENTS", String(30)),
+    Column("P_ID", Integer, ForeignKey("PROJECT.P_ID")),  
+    Column("STAT", Enum(SprintStatus)),
+    Column("CREATE_DATE", Date)
+)
+
+# COMMENT 테이블 정의
+comment = Table(
+    "COMMENT",
+    metadata,
+    Column("C_ID", Integer, primary_key=True, autoincrement=True),
+    Column("REF_TYPE", String(20), nullable=False),
+    Column("REF_ID", Integer, nullable=False),
+    Column("UID", String(30), ForeignKey("USER.UID"), nullable=False),
+    Column("CONTENT", String(500), nullable=False),           # ✅ 변경된 부분
+    Column("CREATE_DATE", DateTime, default=datetime.utcnow)
 )
