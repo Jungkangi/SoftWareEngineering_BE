@@ -100,7 +100,7 @@ alert = Table(
     Column("A_CATEGORY", Enum(AlertTypeEnum), nullable=False),
     Column("A_CONTENT", String(300), nullable=False),
     Column("A_READ", Boolean, default=False, nullable=False),
-    Column("U_ID", String(30), ForeignKey("USER.UID")), # 수신자
+    Column("UID", String(30), ForeignKey("USER.UID")), # 수신자
     Column("P_ID", Integer, ForeignKey("PROJECT.P_ID"), nullable=True),
     Column("I_ID", Integer, ForeignKey("ISSUE.I_ID"), nullable=True)
 )
