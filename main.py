@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.database import database, engine  # engine은 여기서 가져와야 함
 from app.models import metadata            # metadata만 models.py에서 가져오면 됨
-from app.routers import user, project, team, auth, sprint, comment
+from app.routers import user, project, team, auth, sprint, comment, alert, issue
 app = FastAPI()
 
 # DB 연결
@@ -23,6 +23,8 @@ app.include_router(team.router)
 app.include_router(auth.router)
 app.include_router(sprint.router)
 app.include_router(comment.router)
+app.include_router(alert.router)
+app.include_router(issue.router)
 
 @app.get("/")
 def read_root():

@@ -1,8 +1,10 @@
 from datetime import datetime
-from sqlalchemy import Table, Column, Integer, String, Date, DateTime, Enum, ForeignKey, MetaData
+from sqlalchemy import Table, Column, Integer, String, Date, DateTime, Enum, ForeignKey, MetaData, Boolean
 import enum
 
 metadata = MetaData()
+
+#############################################################
 
 # P_STATUS ENUM 정의
 class ProjectStatus(enum.Enum):
@@ -11,6 +13,7 @@ class ProjectStatus(enum.Enum):
     ON_HOLD = "ON_HOLD"
     CANCELLED = "CANCELLED"
 
+# 이슈 상태 ENUM 정의
 class IssueStatus(enum.Enum):
     NOT_CHECKED = "NOT_CHECKED" # 미확인
     CHECKED = "CHECKED"         # 확인됨
@@ -18,12 +21,31 @@ class IssueStatus(enum.Enum):
     COMPLETED = "COMPLETED"     # 완료
     ON_HOLD = "ON_HOLD"         # 보류 중
 
+# 중요도 ENUM 정의
+class PriorityEnum(enum.Enum):
+    LOW = "LOW"         # 낮음
+    MEDIUM = "MEDIUM"   # 보통
+    HIGH = "HIGH"       # 높음
+
+# 공개 여부 ENUM 정의
+class ReleaseEnum(enum.Enum):
+    PUBLIC = "PUBLIC"   # 공개
+    PRIVATE = "PRIVATE" # 비공개
+
+class AlertTypeEnum(enum.Enum):
+    TEAM_INVITE = "TEAM_INVITE"  # 팀 초대
+    ISSUE_NOTIFICATION = "ISSUE_NOTIFICATION"  # 이슈 알림
+    ISSUE_DEADLINE_NEAR = "ISSUE_DEADLINE_NEAR"  # 이슈 마감 임박
+    ISSUE_DEADLINE_OVER = "ISSUE_DEADLINE_OVER"  # 이슈 마감 초과
+
 # 🔹 Sprint 상태 ENUM 정의
 class SprintStatus(enum.Enum):
     TODO = "TODO"
     PROCESSING = "PROCESSING"
     REVIEW = "REVIEW"
     DONE = "DONE"
+
+############################################################
 
 # USER 테이블
 user = Table(
@@ -66,15 +88,28 @@ issue = Table(
     Column("I_ID", Integer, primary_key=True, autoincrement=True),
     Column("TITLE", String(100), nullable=False),
     Column("CONTENT", String(300)),
-    Column("I_STATE", String(20), default=IssueStatus.NOT_CHECKED),
-    Column("I_RELEASE", String(20)),
-    Column("PRIORITY", String(20)),
+    Column("I_STATUS", Enum(IssueStatus), default=IssueStatus.NOT_CHECKED),
+    Column("I_RELEASE", Enum(ReleaseEnum), default=ReleaseEnum.PRIVATE),
+    Column("PRIORITY", Enum(PriorityEnum), default=PriorityEnum.LOW),
     Column("CREATE_DATE", Date),
     Column("START_DATE", Date),
     Column("EXPIRE_DATE", Date),
-    Column("FROM_U_ID", String(30), ForeignKey("USER.UID")),
-    Column("FOR_U_ID", String(30), ForeignKey("USER.UID")),
-    Column("P_ID", String(100), ForeignKey("PROJECT.P_ID"))
+    Column("FROM_UID", String(30), ForeignKey("USER.UID")),
+    Column("FOR_UID", String(30), ForeignKey("USER.UID")),
+    Column("P_ID", Integer, ForeignKey("PROJECT.P_ID"))
+)
+
+# ALERT 테이블
+alert = Table(
+    "ALERT",
+    metadata,
+    Column("A_ID", Integer, primary_key=True, autoincrement=True),
+    Column("A_CATEGORY", Enum(AlertTypeEnum), nullable=False),
+    Column("A_CONTENT", String(300), nullable=False),
+    Column("A_READ", Boolean, default=False, nullable=False),
+    Column("UID", String(30), ForeignKey("USER.UID")), # 수신자
+    Column("P_ID", Integer, ForeignKey("PROJECT.P_ID"), nullable=True),
+    Column("I_ID", Integer, ForeignKey("ISSUE.I_ID"), nullable=True)
 )
 
 
