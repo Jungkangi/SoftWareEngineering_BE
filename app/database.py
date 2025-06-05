@@ -4,7 +4,7 @@ import pymysql
 pymysql.install_as_MySQLdb()
 
 # MariaDB 연결 정보 설정
-DATABASE_URL = "mysql+aiomysql://root:1234@localhost:3306/shin"
+DATABASE_URL = "mysql+aiomysql://root:root@localhost:3310/shin"
 
 # databases용 비동기 연결
 database = Database(DATABASE_URL)

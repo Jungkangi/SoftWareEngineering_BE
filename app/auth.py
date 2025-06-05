@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 # 환경 설정
 SECRET_KEY = "1234"  # ⚠️ 실제 환경에서는 .env로 관리
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 # 비밀번호 암호화용 context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
