@@ -11,6 +11,7 @@ app = FastAPI()
 async def connect_to_db():
     await database.connect()
 
+
 # DB 연결 해제
 @app.on_event("shutdown")
 async def disconnect_from_db():
