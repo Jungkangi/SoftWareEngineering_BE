@@ -19,6 +19,6 @@ jobs:
           script: |
             cd ~/SoftWareEngineering_BE
             git config --global --add safe.directory /home/ubuntu/SoftWareEngineering_BE
-            git pull origin dev
+            git pull origin main
             docker compose down || true
             docker compose up -d --build
