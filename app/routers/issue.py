@@ -147,7 +147,7 @@ async def create_issue(project_id: int, data: ISSUE_SEND, current_user: dict = D
     # 현재 로그인한 사용자의 UID로 이슈 작성자 설정
     values["P_ID"] = project_id
     values["FROM_UID"] = current_user["UID"]
-    values["CREATE_DATE"] = datetime.now().date()
+    values["CREATE_DATE"] = datetime.now()
 
     query = issue.insert().values(**values)
     await database.execute(query)
