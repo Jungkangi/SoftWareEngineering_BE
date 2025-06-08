@@ -17,7 +17,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest):
-    query = sa.text("SELECT * FROM user WHERE UID = :uid").bindparams(uid=data.UID)
+    query = sa.text("SELECT * FROM USER WHERE UID = :uid").bindparams(uid=data.UID)
     result = await database.fetch_one(query)
 
     if result is None:
