@@ -144,3 +144,39 @@ async def update_project(
     # ✅ 수정 후 결과 반환
     updated_project = await database.fetch_one(project.select().where(project.c.P_ID == project_id))
     return updated_project
+
+# ✅ 프로젝트 삭제 (PM만 가능)
+@router.delete("/projects/{project_id}")
+async def delete_project(
+    project_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    uid = current_user["UID"]
+
+    # ✅ PM 여부 확인
+    pm_check_query = sa.select(team).where(
+        team.c.P_ID == project_id,
+        team.c.U_ID == uid,
+        team.c.ROLE == "PM"
+    )
+    is_pm = await database.fetch_one(pm_check_query)
+
+    if not is_pm:
+        raise HTTPException(status_code=403, detail="PM만 프로젝트를 삭제할 수 있습니다.")
+
+    # ✅ 프로젝트 존재 여부 확인
+    project_check_query = project.select().where(project.c.P_ID == project_id)
+    project_row = await database.fetch_one(project_check_query)
+
+    if not project_row:
+        raise HTTPException(status_code=404, detail="해당 프로젝트가 존재하지 않습니다.")
+
+    # ✅ 팀 삭제 (P_ID 기준)
+    delete_teams_query = team.delete().where(team.c.P_ID == project_id)
+    await database.execute(delete_teams_query)
+
+    # ✅ 프로젝트 삭제
+    delete_project_query = project.delete().where(project.c.P_ID == project_id)
+    await database.execute(delete_project_query)
+
+    return {"message": f"프로젝트 ID {project_id} 및 관련 팀이 삭제되었습니다."}
