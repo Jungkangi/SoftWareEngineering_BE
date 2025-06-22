@@ -40,6 +40,13 @@ class ProjectWithUsersOut(ProjectOut):
     P_ID: int
     USERS: List[UserInProject]
 
+# ✅ 프로젝트 업데이트 요청용 스키마
+class ProjectUpdate(BaseModel):
+    P_NAME: Optional[str] = None
+    DISCRIPTION: Optional[str] = None
+    PRIORITY: Optional[str] = None
+    CATEGORY: Optional[str] = None
+
 # ✅ 전체 프로젝트 조회 (모든 사용자용 - 공개 프로젝트라면)
 @router.get("/projects/", response_model=List[ProjectOut])
 async def get_projects():
@@ -98,3 +105,39 @@ async def get_my_projects_with_users(current_user: dict = Depends(get_current_us
         })
 
     return result
+
+# ✅ 프로젝트 수정 (PM만 가능)
+@router.put("/projects/{project_id}", response_model=ProjectOut)
+async def update_project(
+    project_id: int,
+    data: ProjectUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    uid = current_user["UID"]
+
+    # ✅ 이 사용자가 PM인지 확인
+    pm_check_query = sa.select(team).where(
+        team.c.P_ID == project_id,
+        team.c.U_ID == uid,
+        team.c.ROLE == "PM"
+    )
+    is_pm = await database.fetch_one(pm_check_query)
+    if not is_pm:
+        raise HTTPException(status_code=403, detail="이 프로젝트의 PM만 수정할 수 있습니다.")
+
+    # ✅ 프로젝트 존재 확인
+    project_query = project.select().where(project.c.P_ID == project_id)
+    existing_project = await database.fetch_one(project_query)
+    if not existing_project:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+    # ✅ 수정할 값 준비
+    update_values = {k: v for k, v in data.dict().items() if v is not None}
+
+    # ✅ 업데이트 수행
+    update_query = project.update().where(project.c.P_ID == project_id).values(**update_values)
+    await database.execute(update_query)
+
+    # ✅ 수정 후 결과 반환
+    updated_project = await database.fetch_one(project.select().where(project.c.P_ID == project_id))
+    return updated_project
