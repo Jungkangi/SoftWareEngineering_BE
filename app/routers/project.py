@@ -28,6 +28,7 @@ class ProjectIn(BaseModel):
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
 class ProjectOut(ProjectIn):
+    P_ID: int
     P_CDATE: datetime | None = None  # 프로젝트 생성일 (응답 전용 필드)
 
 
