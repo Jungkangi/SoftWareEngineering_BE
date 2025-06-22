@@ -28,6 +28,7 @@ class ProjectIn(BaseModel):
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
 class ProjectOut(ProjectIn):
+    P_ID: int
     P_CDATE: datetime | None = None  # 프로젝트 생성일 (응답 전용 필드)
 
 
@@ -57,15 +58,22 @@ async def get_projects():
 @router.post("/projects/", response_model=ProjectOut)
 async def create_project(
     data: ProjectIn,
-    current_user: dict = Depends(get_current_user)  # JWT에서 UID 추출
+    current_user: dict = Depends(get_current_user)
 ):
-    # 현재 로그인한 사용자의 UID로 프로젝트 작성자 설정
     values = data.dict()
     values["UID"] = current_user["UID"]
+    values["P_CDATE"] = datetime.utcnow()  # ✅ 실제 생성 시간 기록
 
-    query = project.insert().values(**values)
-    await database.execute(query)
-    return values
+    # 프로젝트 INSERT
+    insert_query = project.insert().values(**values)
+    new_project_id = await database.execute(insert_query)
+
+    # ✅ 생성된 정보 반환
+    return {
+        "P_ID": new_project_id,
+        **data.dict(),
+        "P_CDATE": values["P_CDATE"]
+    }
 
 # ✅ 내 프로젝트 조회
 @router.get("/projects/my", response_model=List[ProjectOut])
