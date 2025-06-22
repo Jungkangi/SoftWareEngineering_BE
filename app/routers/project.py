@@ -101,6 +101,9 @@ async def get_my_projects_with_users(current_user: dict = Depends(get_current_us
             "P_NAME": p["P_NAME"],
             "P_STATUS": p["P_STATUS"],
             "P_CDATE": p["P_CDATE"],
+            "DISCRIPTION": p["DISCRIPTION"],  # ✅ 추가
+            "PRIORITY": p["PRIORITY"],        # ✅ 추가
+            "CATEGORY": p["CATEGORY"],        # ✅ 추가
             "USERS": user_list
         })
 
