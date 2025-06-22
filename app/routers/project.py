@@ -1,7 +1,7 @@
 from enum import Enum
 from fastapi import APIRouter, HTTPException, Depends
 from app.database import database
-from app.models import project, user
+from app.models import project, user, team
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -26,6 +26,16 @@ class ProjectIn(BaseModel):
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
 class ProjectOut(ProjectIn):
     P_CDATE: datetime | None = None  # 프로젝트 생성일 (응답 전용 필드)
+
+
+class UserInProject(BaseModel):
+    UID: str
+    NICKNAME: str
+
+# ✅ 프로젝트와 사용자 정보를 함께 반환하기 위한 스키마
+class ProjectWithUsersOut(ProjectOut):
+    P_ID: int
+    USERS: List[UserInProject]
 
 # ✅ 전체 프로젝트 조회 (모든 사용자용 - 공개 프로젝트라면)
 @router.get("/projects/", response_model=List[ProjectOut])
@@ -57,3 +67,31 @@ async def get_my_projects(current_user: dict = Depends(get_current_user)):
     uid = current_user["UID"]
     query = project.select().where(project.c.UID == uid)
     return await database.fetch_all(query)
+
+# ✅ 내 프로젝트와 참여 중인 사용자 정보 조회
+@router.get("/projects/my/with-users", response_model=List[ProjectWithUsersOut])
+async def get_my_projects_with_users(current_user: dict = Depends(get_current_user)):
+    uid = current_user["UID"]
+
+    # 1. 사용자가 생성한 프로젝트 조회
+    project_query = sa.select(project).where(project.c.UID == uid)
+    projects = await database.fetch_all(project_query)
+
+    result = []
+
+    for p in projects:
+        # 2. 프로젝트 ID 기준으로 참여 중인 사용자 조회
+        user_query = sa.select(user.c.UID, user.c.NICKNAME).select_from(
+            team.join(user, team.c.U_ID == user.c.UID)
+        ).where(team.c.P_ID == p["P_ID"])
+        user_list = await database.fetch_all(user_query)
+
+        result.append({
+            "P_ID": p["P_ID"],
+            "P_NAME": p["P_NAME"],
+            "P_STATUS": p["P_STATUS"],
+            "P_CDATE": p["P_CDATE"],
+            "USERS": user_list
+        })
+
+    return result
