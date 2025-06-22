@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Path
 from app.database import database
-from app.models import sprint, SprintStatus
+from app.models import sprint, SprintStatus, sprint_assign, user
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
 from app.dependencies import get_current_user
+import sqlalchemy as sa
 
 router = APIRouter()
 
@@ -13,7 +14,8 @@ class SprintCreate(BaseModel):
     TITLE: str
     CONTENTS: str
     P_ID: int
-    STAT: Optional[SprintStatus] = SprintStatus.PROCESSING  # 기본값: PROCESSING
+    STAT: Optional[SprintStatus] = SprintStatus.PROCESSING
+    ASSIGNEES: Optional[List[str]] = None  # ✅ UID 리스트 추가
 
 # 🔹 응답용
 class SprintOut(SprintCreate):
@@ -24,35 +26,82 @@ class SprintOut(SprintCreate):
 class SprintUpdate(BaseModel):
     STAT: SprintStatus  # 필수 필드, 스프린트 상태만 수정 가능
 
+class SprintAssignIn(BaseModel):
+    S_ID: int
+    UID: str
+
+class SprintAssignOut(SprintAssignIn):
+    ID: int
+    ASSIGNED_DATE: date
+
+class SprintAssignee(BaseModel):
+    UID: str
+    NICKNAME: str
+
+class SprintWithAssigneesOut(SprintOut):
+    ASSIGNEES: List[SprintAssignee]
+
 # ✅ 특정 프로젝트의 모든 스프린트 조회 (권한 체크 X)
-@router.get("/sprints/project/{projectid}", response_model=List[SprintOut])
+@router.get("/sprints/project/{projectid}", response_model=List[SprintWithAssigneesOut])
 async def get_project_sprints(
     projectid: int,
-    current_user: dict = Depends(get_current_user)  # 🔐 JWT 인증 추가
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    특정 프로젝트에 속한 모든 스프린트 목록을 반환합니다.
-    로그인한 사용자만 조회할 수 있습니다.
-    """
-    query = sprint.select().where(sprint.c.P_ID == projectid)
-    return await database.fetch_all(query)
+    # 1. 스프린트 조회
+    sprint_query = sprint.select().where(sprint.c.P_ID == projectid)
+    sprint_rows = await database.fetch_all(sprint_query)
+
+    result = []
+
+    for s in sprint_rows:
+        # 2. 배정된 사용자 목록 조회 (JOIN user)
+        assignee_query = sa.select(
+            sprint_assign.c.UID,
+            user.c.NICKNAME
+        ).select_from(
+            sprint_assign.join(user, sprint_assign.c.UID == user.c.UID)
+        ).where(sprint_assign.c.S_ID == s["S_ID"])
+        assignees = await database.fetch_all(assignee_query)
+
+        # 3. 결과 조립
+        result.append({
+            **s,
+            "ASSIGNEES": assignees
+        })
+
+    return result
 
 # ✅ 스프린트 생성 API (JWT 인증 필요)
 @router.post("/sprints/create", response_model=SprintOut)
 async def create_sprint(
     data: SprintCreate,
-    current_user: dict = Depends(get_current_user)  # 🔐 JWT 기반 사용자 인증
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    로그인한 사용자만 스프린트를 생성할 수 있습니다.
-    STAT 값을 입력하지 않으면 기본값 PROCESSING으로 설정됩니다.
-    """
-    query = sprint.insert().values(**data.dict())
-    new_id = await database.execute(query)
-    
+    # 1. 스프린트 생성
+    sprint_data = {
+        "TITLE": data.TITLE,
+        "CONTENTS": data.CONTENTS,
+        "P_ID": data.P_ID,
+        "STAT": data.STAT
+    }
+
+    insert_query = sprint.insert().values(**sprint_data)
+    new_sprint_id = await database.execute(insert_query)
+
+    # 2. UID 리스트를 SPRINT_ASSIGN에 추가
+    if data.ASSIGNEES:
+        for uid in data.ASSIGNEES:
+            assign_query = sprint_assign.insert().values(
+                S_ID=new_sprint_id,
+                UID=uid,
+                ASSIGNED_DATE=date.today()
+            )
+            await database.execute(assign_query)
+
+    # 3. 응답
     return {
-        **data.dict(),
-        "S_ID": new_id,
+        **sprint_data,
+        "S_ID": new_sprint_id,
         "CREATE_DATE": date.today()
     }
 
@@ -84,33 +133,95 @@ async def update_sprint_stat(
 @router.delete("/sprints/project/{projectid}")
 async def delete_sprints_by_project(
     projectid: int,
-    current_user: dict = Depends(get_current_user)  # 🔐 JWT 인증
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    특정 프로젝트에 연결된 모든 스프린트를 삭제합니다.
-    로그인한 사용자만 요청할 수 있습니다.
-    """
-    delete_query = sprint.delete().where(sprint.c.P_ID == projectid)
-    result = await database.execute(delete_query)
-    return {"message": f"프로젝트 ID {projectid}에 속한 스프린트가 삭제되었습니다."}
+    # 1. 해당 프로젝트의 스프린트 ID 목록 조회
+    sprint_ids_query = sa.select(sprint.c.S_ID).where(sprint.c.P_ID == projectid)
+    sprint_ids = await database.fetch_all(sprint_ids_query)
+
+    # 2. 각 스프린트에 연결된 SPRINT_ASSIGN 삭제
+    for s in sprint_ids:
+        await database.execute(
+            sprint_assign.delete().where(sprint_assign.c.S_ID == s["S_ID"])
+        )
+
+    # 3. 스프린트 삭제
+    delete_sprint_query = sprint.delete().where(sprint.c.P_ID == projectid)
+    await database.execute(delete_sprint_query)
+
+    return {"message": f"프로젝트 ID {projectid}의 모든 스프린트 및 할당 정보가 삭제되었습니다."}
 
 # ✅ 단일 스프린트 삭제
 @router.delete("/sprints/{sprint_id}")
 async def delete_single_sprint(
     sprint_id: int,
-    current_user: dict = Depends(get_current_user)  # 🔐 JWT 인증
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    특정 스프린트 하나만 삭제합니다.
-    로그인한 사용자만 요청할 수 있습니다.
-    """
-    # 1. 존재 여부 확인
+    # 1. 스프린트 존재 확인
     existing = await database.fetch_one(sprint.select().where(sprint.c.S_ID == sprint_id))
     if not existing:
         raise HTTPException(status_code=404, detail="스프린트를 찾을 수 없습니다.")
 
-    # 2. 삭제 실행
-    delete_query = sprint.delete().where(sprint.c.S_ID == sprint_id)
+    # 2. SPRINT_ASSIGN 먼저 삭제
+    delete_assign_query = sprint_assign.delete().where(sprint_assign.c.S_ID == sprint_id)
+    await database.execute(delete_assign_query)
+
+    # 3. 스프린트 삭제
+    delete_sprint_query = sprint.delete().where(sprint.c.S_ID == sprint_id)
+    await database.execute(delete_sprint_query)
+
+    return {"message": f"스프린트 ID {sprint_id} 및 관련 할당 정보가 삭제되었습니다."}
+
+# ✅ 스프린트에 사용자 삭제 (POST 메서드, JWT 인증 필요)
+@router.delete("/sprint-assign")
+async def unassign_user_from_sprint(
+    data: SprintAssignIn,
+    current_user: dict = Depends(get_current_user)
+):
+    # 존재 여부 확인
+    existing = await database.fetch_one(
+        sprint_assign.select().where(
+            (sprint_assign.c.S_ID == data.S_ID) &
+            (sprint_assign.c.UID == data.UID)
+        )
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="할당 정보가 없습니다.")
+
+    # 삭제 실행
+    delete_query = sprint_assign.delete().where(
+        (sprint_assign.c.S_ID == data.S_ID) &
+        (sprint_assign.c.UID == data.UID)
+    )
     await database.execute(delete_query)
 
-    return {"message": f"스프린트 ID {sprint_id}가 삭제되었습니다."}
+    return {"message": f"스프린트 {data.S_ID}에서 사용자 {data.UID}가 제거되었습니다."}
+
+# ✅ 스프린트에 사용자 추가 (POST 메서드, JWT 인증 필요)
+@router.post("/sprint-assign", response_model=SprintAssignOut)
+async def assign_user_to_sprint(
+    data: SprintAssignIn,
+    current_user: dict = Depends(get_current_user)
+):
+    # 이미 할당돼 있으면 중복 방지
+    exists = await database.fetch_one(
+        sprint_assign.select().where(
+            (sprint_assign.c.S_ID == data.S_ID) &
+            (sprint_assign.c.UID == data.UID)
+        )
+    )
+    if exists:
+        raise HTTPException(status_code=400, detail="이미 해당 사용자에게 할당됨")
+
+    # 새 할당 추가
+    query = sprint_assign.insert().values(
+        S_ID=data.S_ID,
+        UID=data.UID,
+        ASSIGNED_DATE=date.today()
+    )
+    new_id = await database.execute(query)
+
+    result = await database.fetch_one(
+        sprint_assign.select().where(sprint_assign.c.ID == new_id)
+    )
+    return result

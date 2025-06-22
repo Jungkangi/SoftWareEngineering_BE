@@ -139,3 +139,12 @@ comment = Table(
     Column("CREATE_DATE", DateTime, default=datetime.utcnow)
 )
 
+# 🔹 Sprint Assign 테이블 정의
+sprint_assign = Table(
+    "SPRINT_ASSIGN",
+    metadata,
+    Column("ID", Integer, primary_key=True, autoincrement=True),
+    Column("S_ID", Integer, ForeignKey("SPRINT.S_ID")),
+    Column("UID", String(30), ForeignKey("USER.UID")),
+    Column("ASSIGNED_DATE", Date)
+)
