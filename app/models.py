@@ -66,7 +66,10 @@ project = Table(
     Column("P_NAME", String(50), nullable=False),
     Column("P_CDATE", DateTime),
     Column("P_STATUS", Enum(ProjectStatus), default=ProjectStatus.IN_PROGRESS),
-    Column("UID", String(30), ForeignKey("USER.UID"))
+    Column("UID", String(30), ForeignKey("USER.UID")),
+    Column("DISCRIPTION", String(200)),   # ✅ 추가
+    Column("PRIORITY", String(20)),       # ✅ 추가
+    Column("CATEGORY", String(50))        # ✅ 추가
 )
 
 # TEAM 테이블
