@@ -21,6 +21,9 @@ class P_Enum(str, Enum):
 class ProjectIn(BaseModel):
     P_NAME: str                    # 프로젝트 이름
     P_STATUS: P_Enum = Field(description= "상태", default=P_Enum.IN_PROGRESS)
+    DISCRIPTION: Optional[str] = None
+    PRIORITY: Optional[str] = None
+    CATEGORY: Optional[str] = None
     # UID는 더 이상 클라이언트로부터 받지 않음 → JWT로 추출
 
 # ✅ 응답용 스키마: API가 반환할 프로젝트 데이터 형식
