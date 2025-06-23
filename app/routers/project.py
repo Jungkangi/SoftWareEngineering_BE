@@ -47,6 +47,7 @@ class ProjectUpdate(BaseModel):
     DISCRIPTION: Optional[str] = None
     PRIORITY: Optional[str] = None
     CATEGORY: Optional[str] = None
+    P_STATUS: Optional[P_Enum] = None
 
 # ✅ 전체 프로젝트 조회 (모든 사용자용 - 공개 프로젝트라면)
 @router.get("/projects/", response_model=List[ProjectOut])
